@@ -2,20 +2,34 @@
 FastAPI app exposing the FinScout agent over HTTP.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from agent import research
 from db import save_report, get_report, get_latest_report_for_ticker, list_reports
 
 app = FastAPI(title="FinScout API")
 
-# Allows Next.js f/e (running on a different port/domain) to call this API.
+# Rate limiter setup — identifies callers by IP address and enforces
+# the per-route limits declared below with @limiter.limit(...)
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Locked to your actual frontend domain + local dev — not "*" anymore.
+# Update the vercel URL here once you know your final deployed domain.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=[
+        "https://finscout-frontend.vercel.app",
+        "http://localhost:3000",
+    ],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -29,11 +43,13 @@ class ResearchResponse(BaseModel):
 
 
 @app.post("/research/{ticker}", response_model=ResearchResponse)
-def run_research(ticker: str):
+@limiter.limit("10/minute")
+def run_research(request: Request, ticker: str):
     """
-    Runs/reuses a research report for a ticker.
-    Checks cache first, this is the endpoint 
-    the f/e's search box will call.
+    Runs (or reuses) a research report for a ticker.
+    Checks cache first — this is the endpoint your frontend's
+    search box calls. Rate-limited to 10 requests/minute per IP
+    since each uncached call burns several Groq API calls.
     """
     ticker = ticker.upper().strip()
     if not ticker.isalpha() or len(ticker) > 6:
@@ -52,12 +68,11 @@ def run_research(ticker: str):
     try:
         result = research(ticker)
     except Exception as e:
-        # yfinance throws all sorts of things for bad/delisted tickers
-        # surfacing it as a clean 404 instead of a raw stack trace.
+        # yfinance throws all sorts of things for bad/delisted tickers —
+        # surface it as a clean 404 instead of a raw stack trace.
         raise HTTPException(404, f"Couldn't find data for '{ticker}': {e}")
 
     raw_data = result["raw_data"]
-    
     saved = save_report(result, raw_data)
 
     return ResearchResponse(
@@ -70,7 +85,8 @@ def run_research(ticker: str):
 
 
 @app.get("/reports/{report_id}")
-def fetch_report(report_id: str):
+@limiter.limit("30/minute")
+def fetch_report(request: Request, report_id: str):
     report = get_report(report_id)
     if not report:
         raise HTTPException(404, "Report not found.")
@@ -78,7 +94,8 @@ def fetch_report(report_id: str):
 
 
 @app.get("/reports")
-def fetch_history(limit: int = 20):
+@limiter.limit("30/minute")
+def fetch_history(request: Request, limit: int = 20):
     return list_reports(limit)
 
 

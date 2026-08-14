@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { getReportById } from "@/lib/api";
 import ReportView from "@/components/ReportView";
 
@@ -9,21 +10,52 @@ export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getReportById(id).then(setReport).catch((e) => setError(e.message));
+    getReportById(id)
+      .then(setReport)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  if (error) return <p className="text-center mt-12 text-red-600">{error}</p>;
-  if (!report) return <p className="text-center mt-12 text-gray-500">Loading...</p>;
-
   return (
-    <main className="min-h-screen px-6 py-12">
-      <ReportView
-        ticker={report.ticker}
-        report={report.final_report}
-        wasRevised={report.was_revised}
-      />
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+      {/* Header */}
+      <div className="border-b border-slate-700 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/" className="text-slate-300 hover:text-blue-400 transition">
+            ← Back
+          </Link>
+          <Link href="/history" className="text-slate-300 hover:text-blue-400 transition">
+            History
+          </Link>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        {error && (
+          <div className="p-6 bg-red-900/30 border border-red-500/30 rounded-lg text-red-200 text-center">
+            ✕ {error}
+          </div>
+        )}
+
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-24">
+            <div className="w-12 h-12 rounded-full border-4 border-slate-700 border-t-blue-500 animate-spin mb-4"></div>
+            <p className="text-slate-400">Loading report...</p>
+          </div>
+        )}
+
+        {report && (
+          <ReportView
+            ticker={report.ticker}
+            report={report.final_report}
+            wasRevised={report.was_revised}
+          />
+        )}
+      </div>
     </main>
   );
 }

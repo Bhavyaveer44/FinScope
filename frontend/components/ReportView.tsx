@@ -10,31 +10,43 @@ type Props = {
 
 export default function ReportView({ ticker, report, wasRevised, fromCache }: Props) {
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-semibold">{ticker} Research Report</h2>
-        <div className="flex gap-2 text-xs">
-          {/* Small badges to make agentic part visible, not hidden,
-              proof that a critique loop actually ran. */}
+    <div className="space-y-6">
+      <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden shadow-xl">
+        <div className="bg-gradient-to-r from-blue-600 to-cyan-600 px-8 py-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-3xl font-bold text-white">{ticker}</h2>
+            <p className="text-blue-100 font-semibold">Research Report</p>
+          </div>
+        </div>
+
+        <div className="px-8 py-4 bg-slate-800/50 border-b border-slate-700 flex gap-3">
           {wasRevised && (
-            <span className="px-2 py-1 rounded bg-amber-100 text-amber-800">
-              Revised after self-check
-            </span>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-500/50">
+              <span className="text-amber-400">✓</span>
+              <span className="text-xs font-medium text-amber-200">Revised after self-check</span>
+            </div>
           )}
           {fromCache && (
-            <span className="px-2 py-1 rounded bg-gray-100 text-gray-600">
-              From cache
-            </span>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/50 border border-slate-500/50">
+              <span className="text-slate-300">⚡</span>
+              <span className="text-xs font-medium text-slate-300">Cached result</span>
+            </div>
           )}
         </div>
-      </div>
 
-      {/* prose classes come from the Tailwind Typography plugin,
-          makes react-markdown's output (headers, bullets, bold) look clean 
-          without you writing custom CSS for every markdown element. */}
-      <article className="prose prose-sm max-w-none">
-        <ReactMarkdown>{report}</ReactMarkdown>
-      </article>
+        <article className="prose prose-invert prose-sm max-w-none px-8 py-8 text-slate-200">
+          <style>{`
+            .prose h2 { @apply text-2xl font-bold text-blue-300 mt-6 mb-3; }
+            .prose h3 { @apply text-xl font-bold text-cyan-300 mt-5 mb-2; }
+            .prose p { @apply text-slate-300 leading-relaxed mb-4; }
+            .prose ul { @apply text-slate-300 space-y-2; }
+            .prose li { @apply text-slate-300; }
+            .prose strong { @apply text-blue-300 font-bold; }
+            .prose code { @apply bg-slate-700 text-cyan-300 px-2 py-1 rounded text-sm; }
+          `}</style>
+          <ReactMarkdown>{report}</ReactMarkdown>
+        </article>
+      </div>
     </div>
   );
 }
