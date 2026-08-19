@@ -6,7 +6,9 @@ agentic part, everything else is plumbing.
 
 import os
 import json
+import time
 from groq import Groq
+from groq import RateLimitError
 from dotenv import load_dotenv
 
 from tools import get_price_and_fundamentals, get_recent_news
@@ -15,18 +17,28 @@ load_dotenv()
 client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 MODEL = "llama-3.3-70b-versatile"
+MAX_RATE_LIMIT_RETRIES = 3
+RATE_LIMIT_BACKOFF_SECONDS = 2
 
 
 def _call_llm(system_prompt: str, user_prompt: str) -> str:
     """Small wrapper so every LLM call in this file looks the same."""
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.3,  # low temperature:grounded, consistent output, not creative writing
-    )
+    for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,  # low temperature:grounded, consistent output, not creative writing
+            )
+            break
+        except RateLimitError:
+            if attempt == MAX_RATE_LIMIT_RETRIES:
+                raise
+            time.sleep(RATE_LIMIT_BACKOFF_SECONDS * (2**attempt))
+
     return response.choices[0].message.content
 
 

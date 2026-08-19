@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from groq import RateLimitError
 
 from agent import research
 from db import save_report, get_report, get_latest_report_for_ticker, list_reports
@@ -67,6 +68,11 @@ def run_research(request: Request, ticker: str):
 
     try:
         result = research(ticker)
+    except RateLimitError:
+        raise HTTPException(
+            429,
+            "The research provider is temporarily rate limited. Please try again in a moment.",
+        )
     except Exception as e:
         # yfinance throws all sorts of things for bad/delisted tickers —
         # surface it as a clean 404 instead of a raw stack trace.
