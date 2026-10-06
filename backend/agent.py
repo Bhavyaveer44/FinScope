@@ -7,31 +7,49 @@ agentic part, everything else is plumbing.
 import os
 import json
 import time
+from pathlib import Path
 from groq import Groq
 from groq import RateLimitError
 from dotenv import load_dotenv
 
 from tools import get_price_and_fundamentals, get_recent_news
 
+# Load backend/.env reliably regardless of working directory
+_backend_dir = Path(__file__).resolve().parent
+_env_path = _backend_dir / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=_env_path)
 load_dotenv()
-client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
-MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "openai/gpt-oss-20b"
 MAX_RATE_LIMIT_RETRIES = 3
 RATE_LIMIT_BACKOFF_SECONDS = 2
 
 
+def _get_groq_client() -> Groq:
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Missing GROQ_API_KEY. Add it to backend/.env before running research."
+        )
+    return Groq(api_key=api_key)
+
+
 def _call_llm(system_prompt: str, user_prompt: str) -> str:
     """Small wrapper so every LLM call in this file looks the same."""
+    client = _get_groq_client()
+    model = os.getenv("GROQ_MODEL", DEFAULT_MODEL)
+
+    response = None
     for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
         try:
             response = client.chat.completions.create(
-                model=MODEL,
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.3,  # low temperature:grounded, consistent output, not creative writing
+                temperature=0.3,  # low temperature: grounded, consistent output, not creative writing
             )
             break
         except RateLimitError:
@@ -39,19 +57,26 @@ def _call_llm(system_prompt: str, user_prompt: str) -> str:
                 raise
             time.sleep(RATE_LIMIT_BACKOFF_SECONDS * (2**attempt))
 
-    return response.choices[0].message.content
+    if response is None or not response.choices:
+        raise RuntimeError("No response returned by language model.")
+
+    return response.choices[0].message.content or ""
 
 
 def gather_data(ticker: str) -> dict:
     """
     Step 1: PLAN + TOOL USE.
     - fetch fundamentals + news.
-    (Later make this smarter: skip news for a query that's
-    purely about valuation ratios. Keeping it fixed for now keeps 
-    the agent loop easy to reason about while you build it.)
     """
     print(f"[1/4] Fetching data for {ticker}...")
     fundamentals = get_price_and_fundamentals(ticker)
+
+    # Validate that market data exists
+    if fundamentals.get("company_name") == "N/A" and fundamentals.get("current_price") == "N/A":
+        raise ValueError(
+            f"No market data found for ticker '{ticker}'. Please verify the symbol."
+        )
+
     news = get_recent_news(ticker)
     return {"fundamentals": fundamentals, "news": news}
 
@@ -162,7 +187,8 @@ def research(ticker: str) -> dict:
     draft = draft_report(data)
     critique = critique_report(draft, data)
 
-    if critique.strip() == "OK":
+    critique_clean = critique.strip().strip("'\"").upper()
+    if critique_clean == "OK" or critique_clean.startswith("OK.") or critique_clean.startswith("OK -"):
         final = draft
         revised = False
     else:
@@ -171,9 +197,9 @@ def research(ticker: str) -> dict:
 
     return {
         "ticker": ticker.upper(),
-        "final_report": final,
-        "draft_report": draft,
-        "critique": critique,
+        "final_report": final.strip(),
+        "draft_report": draft.strip(),
+        "critique": critique.strip(),
         "was_revised": revised,
         "raw_data": data,
     }
