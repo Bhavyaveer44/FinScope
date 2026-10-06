@@ -34,16 +34,7 @@ export default function ReportView({ ticker, report, wasRevised, fromCache }: Pr
           )}
         </div>
 
-        <article className="prose prose-invert prose-sm max-w-none px-8 py-8 text-slate-200">
-          <style>{`
-            .prose h2 { @apply text-2xl font-bold text-blue-300 mt-6 mb-3; }
-            .prose h3 { @apply text-xl font-bold text-cyan-300 mt-5 mb-2; }
-            .prose p { @apply text-slate-300 leading-relaxed mb-4; }
-            .prose ul { @apply text-slate-300 space-y-2; }
-            .prose li { @apply text-slate-300; }
-            .prose strong { @apply text-blue-300 font-bold; }
-            .prose code { @apply bg-slate-700 text-cyan-300 px-2 py-1 rounded text-sm; }
-          `}</style>
+        <article className="prose prose-invert max-w-none px-8 py-8 text-slate-200 prose-headings:font-bold prose-h1:text-3xl prose-h1:text-white prose-h2:text-2xl prose-h2:text-blue-300 prose-h2:mt-6 prose-h2:mb-3 prose-h3:text-xl prose-h3:text-cyan-300 prose-h3:mt-5 prose-h3:mb-2 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:mb-4 prose-ul:text-slate-300 prose-ul:space-y-2 prose-li:text-slate-300 prose-strong:text-blue-300 prose-strong:font-bold prose-code:bg-slate-700 prose-code:text-cyan-300 prose-code:px-2 prose-code:py-1 prose-code:rounded prose-code:text-sm prose-hr:border-slate-700">
           <ReactMarkdown>{report}</ReactMarkdown>
         </article>
       </div>

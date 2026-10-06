@@ -11,6 +11,7 @@ export default function History() {
   useEffect(() => {
     getReportHistory()
       .then(setReports)
+      .catch(() => setReports([]))
       .finally(() => setLoading(false));
   }, []);
 

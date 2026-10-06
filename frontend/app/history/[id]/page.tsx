@@ -3,16 +3,18 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getReportById } from "@/lib/api";
+import { getReportById, ReportDetail as ReportDetailType } from "@/lib/api";
 import ReportView from "@/components/ReportView";
+import AskFollowUp from "@/components/AskFollowUp";
 
 export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
-  const [report, setReport] = useState<any>(null);
+  const [report, setReport] = useState<ReportDetailType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!id) return;
     getReportById(id)
       .then(setReport)
       .catch((e) => setError(e.message))
@@ -49,11 +51,14 @@ export default function ReportDetail() {
         )}
 
         {report && (
-          <ReportView
-            ticker={report.ticker}
-            report={report.final_report}
-            wasRevised={report.was_revised}
-          />
+          <>
+            <ReportView
+              ticker={report.ticker}
+              report={report.final_report}
+              wasRevised={report.was_revised}
+            />
+            <AskFollowUp reportId={report.id} />
+          </>
         )}
       </div>
     </main>

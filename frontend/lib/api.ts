@@ -1,4 +1,33 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const rawUrls = [process.env.NEXT_PUBLIC_API_URL, "http://localhost:8000"].filter(
+  (value): value is string => Boolean(value)
+);
+const API_URLS = Array.from(new Set(rawUrls));
+
+async function fetchWithFallback(path: string, init?: RequestInit): Promise<Response> {
+  let lastError: unknown;
+
+  for (const baseUrl of API_URLS) {
+    try {
+      const res = await fetch(`${baseUrl}${path}`, init);
+      if (res.ok) return res;
+
+      const body = await res.json().catch(() => ({}));
+      lastError = new Error(body.detail || `Request failed (${res.status})`);
+
+      if (baseUrl === API_URLS[API_URLS.length - 1]) {
+        throw lastError;
+      }
+    } catch (error) {
+      lastError = error;
+
+      if (baseUrl === API_URLS[API_URLS.length - 1]) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Request failed");
+}
 
 export type ResearchResult = {
   id: string;
@@ -15,25 +44,37 @@ export type ReportSummary = {
   created_at: string;
 };
 
+export type ReportDetail = {
+  id: string;
+  ticker: string;
+  final_report: string;
+  draft_report: string;
+  critique: string;
+  was_revised: boolean;
+  raw_data: Record<string, unknown>;
+  created_at: string;
+};
+
 export async function runResearch(ticker: string): Promise<ResearchResult> {
-  const res = await fetch(`${API_URL}/research/${ticker}`, { method: "POST" });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `Request failed (${res.status})`);
-  }
-
+  const res = await fetchWithFallback(`/research/${ticker}`, { method: "POST" });
   return res.json();
 }
 
 export async function getReportHistory(): Promise<ReportSummary[]> {
-  const res = await fetch(`${API_URL}/reports`);
-  if (!res.ok) throw new Error("Couldn't load report history");
+  const res = await fetchWithFallback("/reports");
   return res.json();
 }
 
-export async function getReportById(id: string) {
-  const res = await fetch(`${API_URL}/reports/${id}`);
-  if (!res.ok) throw new Error("Report not found");
+export async function getReportById(id: string): Promise<ReportDetail> {
+  const res = await fetchWithFallback(`/reports/${id}`);
+  return res.json();
+}
+
+export async function askFollowUp(reportId: string, question: string): Promise<{ answer: string }> {
+  const res = await fetchWithFallback(`/reports/${reportId}/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
   return res.json();
 }

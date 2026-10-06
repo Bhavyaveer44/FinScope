@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { runResearch, ResearchResult } from "@/lib/api";
 import ReportView from "@/components/ReportView";
+import AskFollowUp from "@/components/AskFollowUp";
 import Link from "next/link";
 
 export default function Home() {
@@ -109,6 +110,7 @@ export default function Home() {
             wasRevised={result.was_revised}
             fromCache={result.from_cache}
           />
+          <AskFollowUp reportId={result.id} />
         </div>
       )}
     </main>
