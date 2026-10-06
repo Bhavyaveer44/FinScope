@@ -35,7 +35,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Allow the production Vercel app plus its preview deployments and local dev.
 allowed_origins = [
-    "https://fin-scope-seven.vercel.app",
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
@@ -51,6 +50,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
