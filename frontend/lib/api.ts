@@ -1,9 +1,15 @@
-const rawUrls = [process.env.NEXT_PUBLIC_API_URL, "http://localhost:8000"].filter(
-  (value): value is string => Boolean(value)
-);
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+const rawUrls = [
+  configuredApiUrl,
+  ...(process.env.NODE_ENV === "development" ? ["http://localhost:8000"] : []),
+].filter((value): value is string => Boolean(value));
 const API_URLS = Array.from(new Set(rawUrls));
 
 async function fetchWithFallback(path: string, init?: RequestInit): Promise<Response> {
+  if (API_URLS.length === 0) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured.");
+  }
+
   let lastError: unknown;
 
   for (const baseUrl of API_URLS) {

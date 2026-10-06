@@ -36,6 +36,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Allow the production Vercel app plus its preview deployments and local dev.
 allowed_origins = [
     "https://fin-scope-seven.vercel.app",
+    "https://finscope-eqgc.onrender.com",
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
