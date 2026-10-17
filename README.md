@@ -1,7 +1,7 @@
 # FinScope- Autonomous Equity Research Agent
 
-FinScout is an autonomous equity research agent that takes a stock ticker and produces an institutional-grade research note. 
-Instead of relying on a single LLM call, FinScout executes an iterative **Plan → Act → Reflect** agentic loop that 
+FinScope is an autonomous equity research agent that takes a stock ticker and produces an institutional-grade research note. 
+Instead of relying on a single LLM call, FinScope executes an iterative **Plan → Act → Reflect** agentic loop that 
 fetches live market data, drafts a report, fact-checks its own output against ground truth source data, and revises discrepancies before presentation.
 
 ---
@@ -35,7 +35,7 @@ fetches live market data, drafts a report, fact-checks its own output against gr
 ## Project Structure
 
 ```text
-finscout/
+FinScope/
 ├── backend/
 │   ├── agent.py            # Agent loop (gather -> draft -> critique -> revise)
 │   ├── db.py               # Dual-engine persistence (SQLite + Supabase fallback)

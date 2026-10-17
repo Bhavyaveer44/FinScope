@@ -1,11 +1,12 @@
 # agent.py
 """
-The FinScout orchestrator: draft > critique > revise > final report.
+The FinScope orchestrator: draft > critique > revise > final report.
 agentic part, everything else is plumbing.
 """
 
 import os
 import json
+import re
 import time
 from pathlib import Path
 from groq import Groq
@@ -24,6 +25,48 @@ load_dotenv()
 DEFAULT_MODEL = "openai/gpt-oss-20b"
 MAX_RATE_LIMIT_RETRIES = 3
 RATE_LIMIT_BACKOFF_SECONDS = 2
+MAX_COMPLETION_TOKENS = 4096
+REQUIRED_REPORT_SECTIONS = (
+    "Company Overview",
+    "Financial Snapshot",
+    "Recent News Summary",
+    "Bull Case",
+    "Bear Case",
+    "Disclaimer",
+)
+
+
+def has_required_report_sections(report: str) -> bool:
+    for section in REQUIRED_REPORT_SECTIONS:
+        pattern = rf"(?im)^\s*(?:#{{1,6}}\s*)?(?:\*\*)?(?:\d+[.)]\s*)?{re.escape(section)}\b"
+        if not re.search(pattern, report):
+            return False
+    return True
+
+
+def _ensure_required_report_sections(report: str, data: dict) -> str:
+    fallback_content = {
+        "Company Overview": "Verified business details were unavailable in the source data.",
+        "Financial Snapshot": (
+            f"Current price: {data['fundamentals'].get('current_price', 'Unavailable')}. "
+            "Other verified metrics were unavailable in this report."
+        ),
+        "Recent News Summary": "No recent news summary was provided in this report.",
+        "Bull Case": "No positive catalysts can be confirmed from the provided source data.",
+        "Bear Case": "The provided source data is insufficient to assess company-specific risks.",
+        "Disclaimer": "This report is for research purposes only and is not financial advice.",
+    }
+    missing = [
+        f"## {index}. {section}\n\n{fallback_content[section]}"
+        for index, section in enumerate(REQUIRED_REPORT_SECTIONS, start=1)
+        if not re.search(
+            rf"(?im)^\s*(?:#{{1,6}}\s*)?(?:\*\*)?(?:\d+[.)]\s*)?{re.escape(section)}\b",
+            report,
+        )
+    ]
+    if missing:
+        report = f"{report.rstrip()}\n\n" + "\n\n".join(missing)
+    return report
 
 
 def _get_groq_client() -> Groq:
@@ -39,6 +82,9 @@ def _call_llm(system_prompt: str, user_prompt: str) -> str:
     """Small wrapper so every LLM call in this file looks the same."""
     client = _get_groq_client()
     model = os.getenv("GROQ_MODEL", DEFAULT_MODEL)
+    completion_options = {"max_completion_tokens": MAX_COMPLETION_TOKENS}
+    if model.startswith("openai/gpt-oss-"):
+        completion_options["reasoning_effort"] = "low"
 
     response = None
     for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
@@ -50,6 +96,7 @@ def _call_llm(system_prompt: str, user_prompt: str) -> str:
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.3,  # low temperature: grounded, consistent output, not creative writing
+                **completion_options,
             )
             break
         except RateLimitError:
@@ -60,7 +107,15 @@ def _call_llm(system_prompt: str, user_prompt: str) -> str:
     if response is None or not response.choices:
         raise RuntimeError("No response returned by language model.")
 
-    return response.choices[0].message.content or ""
+    choice = response.choices[0]
+    content = choice.message.content
+    if not content or not content.strip():
+        finish_reason = choice.finish_reason or "unknown"
+        raise RuntimeError(
+            f"Language model returned an empty response (finish reason: {finish_reason})."
+        )
+
+    return content
 
 
 def gather_data(ticker: str) -> dict:
@@ -71,10 +126,10 @@ def gather_data(ticker: str) -> dict:
     print(f"[1/4] Fetching data for {ticker}...")
     fundamentals = get_price_and_fundamentals(ticker)
 
-    # Validate that market data exists
-    if fundamentals.get("company_name") == "N/A" and fundamentals.get("current_price") == "N/A":
+    # A company name alone is not sufficient evidence that market data was found.
+    if fundamentals.get("current_price") == "N/A":
         raise ValueError(
-            f"No market data found for ticker '{ticker}'. Please verify the symbol."
+            f"No market data found for ticker '{ticker}'. Please verify the symbol or try again later."
         )
 
     news = get_recent_news(ticker)
@@ -101,6 +156,8 @@ def draft_report(data: dict) -> str:
     4. Bull Case (2-3 points)
     5. Bear Case / Risks (2-3 points)
     6. Disclaimer: this is not financial advice, for research purposes only.
+    Do not omit any section. If the source data is insufficient, state that
+    clearly instead of inventing details.
     """
 
     user_prompt = f"""Here is the data to base the report on:
@@ -161,7 +218,10 @@ def revise_report(draft: str, critique: str, data: dict) -> str:
     system_prompt = """You are an equity research assistant. You wrote
     a draft report that an editor found issues with. Produce a corrected
     final version that fixes every issue listed, using ONLY the source data
-    provided. Keep the same section structure as the original draft."""
+    provided. Include all six sections: Company Overview, Financial Snapshot,
+    Recent News Summary, Bull Case, Bear Case / Risks, and Disclaimer. If
+    evidence is unavailable, state that rather than omitting a section or
+    inventing facts."""
 
     user_prompt = f"""SOURCE DATA:
     {json.dumps(data, indent=2)}
@@ -194,6 +254,8 @@ def research(ticker: str) -> dict:
     else:
         final = revise_report(draft, critique, data)
         revised = True
+
+    final = _ensure_required_report_sections(final, data)
 
     return {
         "ticker": ticker.upper(),

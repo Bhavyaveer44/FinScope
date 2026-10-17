@@ -1,5 +1,5 @@
 """
-Persistence layer for FinScout.
+Persistence layer for FinScope.
 Supports Supabase with automatic SQLite fallback so the application
 remains fully functional even if Supabase is unreachable, unconfigured, or offline.
 """

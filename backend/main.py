@@ -3,7 +3,9 @@ FastAPI app exposing the FinScope agent over HTTP.
 """
 
 import json
+import logging
 import os
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -23,10 +25,10 @@ if _env_path.exists():
     load_dotenv(dotenv_path=_env_path)
 load_dotenv()
 
-from agent import research, _call_llm
+from agent import has_required_report_sections, research, _call_llm
 from db import save_report, get_report, get_latest_report_for_ticker, list_reports
 
-app = FastAPI(title="FinScout API")
+app = FastAPI(title="FinScope API")
 
 # Rate limiter setup
 limiter = Limiter(key_func=get_remote_address)
@@ -81,17 +83,21 @@ def run_research(request: Request, ticker: str):
     Checks cache first. Rate-limited to 10 requests/minute per IP.
     """
     ticker = ticker.upper().strip()
-    if not ticker.isalpha() or len(ticker) > 6:
+    if not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,14}", ticker):
         raise HTTPException(400, "That doesn't look like a valid ticker symbol.")
 
     cached = get_latest_report_for_ticker(ticker)
-    if cached:
+    if cached and has_required_report_sections(cached["final_report"]):
         return ResearchResponse(
             id=cached["id"],
             ticker=cached["ticker"],
             final_report=cached["final_report"],
             was_revised=cached["was_revised"],
             from_cache=True,
+        )
+    if cached:
+        logging.getLogger("finscope.api").warning(
+            "Skipping incomplete cached research report for %s.", ticker
         )
 
     try:
@@ -182,4 +188,4 @@ def fetch_history(request: Request, limit: int = 20):
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "service": "FinScout API"}
+    return {"status": "ok", "service": "FinScope API"}

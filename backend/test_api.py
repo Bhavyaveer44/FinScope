@@ -13,7 +13,7 @@ def test_health_check():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert "FinScout" in data["service"]
+    assert "FinScope" in data["service"]
 
 
 def test_invalid_ticker_validation():
@@ -22,8 +22,58 @@ def test_invalid_ticker_validation():
     assert res.status_code == 400
 
     # Too long ticker
-    res = client.post("/research/TOOLONGTICKER")
+    res = client.post("/research/TOOLONGTICKERSYMBOL")
     assert res.status_code == 400
+
+
+def test_ticker_symbols_with_exchange_punctuation_are_accepted():
+    with patch(
+        "main.research",
+        side_effect=ValueError("No market data found for ticker 'BRK.B'."),
+    ):
+        response = client.post("/research/BRK.B")
+
+    assert response.status_code == 404
+    assert "No market data found" in response.json()["detail"]
+
+
+def test_incomplete_cached_report_is_regenerated():
+    complete_report = """## Company Overview
+## Financial Snapshot
+## Recent News Summary
+## Bull Case
+## Bear Case / Risks
+## Disclaimer
+"""
+    result = {
+        "ticker": "ACME",
+        "final_report": complete_report,
+        "draft_report": complete_report,
+        "critique": "OK",
+        "was_revised": False,
+        "raw_data": {"fundamentals": {"current_price": 10}, "news": []},
+    }
+    saved = {"id": "new-report", "ticker": "ACME", "final_report": complete_report, "was_revised": False}
+
+    with (
+        patch(
+            "main.get_latest_report_for_ticker",
+            return_value={
+                "id": "stale-report",
+                "ticker": "ACME",
+                "final_report": "Incomplete old report.",
+                "was_revised": False,
+            },
+        ),
+        patch("main.research", return_value=result) as research,
+        patch("main.save_report", return_value=saved),
+    ):
+        response = client.post("/research/ACME")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "new-report"
+    assert response.json()["from_cache"] is False
+    research.assert_called_once_with("ACME")
 
 
 def test_cors_preflight_localhost():
@@ -82,9 +132,16 @@ def test_database_persistence_and_endpoints():
 
 
 def test_cached_research_flow():
+    complete_report = """## Company Overview
+## Financial Snapshot
+## Recent News Summary
+## Bull Case
+## Bear Case / Risks
+## Disclaimer
+"""
     mock_result = {
         "ticker": "MSFT",
-        "final_report": "Microsoft research note.",
+        "final_report": complete_report,
         "draft_report": "MSFT draft.",
         "critique": "OK",
         "was_revised": False,
